@@ -1,0 +1,31 @@
+{
+  "n_calls": 5000,
+  "baseline": {
+    "n": 5000,
+    "mean_us": 1.1,
+    "median_us": 1.0,
+    "p95_us": 1.4,
+    "p99_us": 1.6,
+    "max_us": 22.0
+  },
+  "inmemory": {
+    "n": 5000,
+    "mean_us": 35.14,
+    "median_us": 28.8,
+    "p95_us": 48.2,
+    "p99_us": 76.4,
+    "max_us": 16693.1
+  },
+  "sqlite": {
+    "n": 5000,
+    "mean_us": 228.8,
+    "median_us": 149.4,
+    "p95_us": 262.8,
+    "p99_us": 1972.0,
+    "max_us": 14652.9
+  },
+  "headline": {
+    "inmemory_overhead_us": 27.8,
+    "sqlite_overhead_us": 148.4
+  }
+}

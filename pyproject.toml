@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prompt-trace"
+version = "0.1.0"
+description = "OpenTelemetry-style tracing for LLM calls. SQLite store, span tree, drop-in Anthropic SDK instrumenter. Hero: under 100μs per-call overhead at 10K calls."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Tajaddin Gafarov", email = "gafarovtajaddin@gmail.com" }]
+keywords = ["llm", "observability", "tracing", "opentelemetry", "anthropic", "claude", "monitoring"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Monitoring",
+]
+
+dependencies = [
+    "pydantic>=2.9.0,<3.0.0",
+    "typing-extensions>=4.12.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.39.0,<1.0.0"]
+ui = ["streamlit>=1.39.0"]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.6.0",
+    "anthropic>=0.39.0,<1.0.0",
+]
+
+[project.scripts]
+prompt-trace = "prompt_trace.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["E501"]
