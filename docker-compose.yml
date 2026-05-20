@@ -1,0 +1,10 @@
+services:
+  trace:
+    build: .
+    image: prompt-trace:latest
+
+  bench:
+    build: .
+    image: prompt-trace:latest
+    entrypoint: ["python", "-m", "benchmarks.overhead_benchmark"]
+    command: ["--calls", "10000"]
