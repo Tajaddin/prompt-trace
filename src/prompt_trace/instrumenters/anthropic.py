@@ -1,14 +1,14 @@
 """Anthropic SDK instrumenter.
 
 Drop-in wrapper: replace `Anthropic()` with `InstrumentedAnthropic(tracer)`
-and every messages.create call writes a Span with input, output, usage,
-and model.
+and every messages.create call writes a Span with usage and model.
 
 Caveats:
 - Wraps the synchronous messages.create only. Async + streaming need their
   own instrumenter (left as a TODO with the same Span shape).
-- Captures the full request and response payloads. If you want PII-safe
-  traces, pass `capture_payloads=False` to drop input/output bodies.
+- Payload capture is OFF by default for PII safety. Pass
+  `capture_payloads=True` to record full request/response bodies on the
+  span (useful for debugging, never for prod logs).
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class InstrumentedAnthropic:
         tracer: Tracer,
         *,
         client: Any | None = None,
-        capture_payloads: bool = True,
+        capture_payloads: bool = False,
         span_name: str = "anthropic.messages.create",
     ):
         if client is None:
