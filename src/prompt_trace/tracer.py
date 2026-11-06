@@ -14,13 +14,22 @@ instrumenters that need to hand the span back to caller-defined cleanup
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 from prompt_trace.span import Span, SpanKind, SpanStatus
 from prompt_trace.storage import InMemoryStore, Store
+
+# One ContextVar for every Tracer, keyed per tracer. A Context keeps every
+# ContextVar ever set in it alive, so a ContextVar per Tracer would leak one
+# entry per short-lived tracer.
+_STACKS: ContextVar[Mapping[object, tuple[Span, ...]]] = ContextVar(
+    "prompt_trace_span_stacks", default=MappingProxyType({})
+)
 
 
 @dataclass
@@ -39,13 +48,19 @@ class Tracer:
     """
 
     store: Store = field(default_factory=InMemoryStore)
-    _stack_var: ContextVar[tuple[Span, ...]] = field(
-        default_factory=lambda: ContextVar("prompt_trace_span_stack", default=()),
-        repr=False,
-    )
+    _key: object = field(default_factory=object, init=False, repr=False)
 
     def _stack(self) -> tuple[Span, ...]:
-        return tuple(s for s in self._stack_var.get() if s.end_time_ns is None)
+        stack = _STACKS.get().get(self._key, ())
+        return tuple(s for s in stack if s.end_time_ns is None)
+
+    def _set_stack(self, stack: tuple[Span, ...]) -> None:
+        stacks = dict(_STACKS.get())
+        if stack:
+            stacks[self._key] = stack
+        else:
+            stacks.pop(self._key, None)
+        _STACKS.set(stacks)
 
     def current_span(self) -> Span | None:
         stack = self._stack()
@@ -72,7 +87,7 @@ class Tracer:
             span.trace_id = parent.trace_id
         elif trace_id is not None:
             span.trace_id = trace_id
-        self._stack_var.set((*self._stack(), span))
+        self._set_stack((*self._stack(), span))
         return span
 
     def end_span(
@@ -85,7 +100,7 @@ class Tracer:
         span.finish(status=status, error=error)
         # Persist after finish so end_time_ns is set.
         self.store.insert(span)
-        self._stack_var.set(self._stack())
+        self._set_stack(self._stack())
 
     @contextmanager
     def span(

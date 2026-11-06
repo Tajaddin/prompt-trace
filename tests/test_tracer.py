@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import threading
 
 import pytest
@@ -72,6 +73,16 @@ class TestTracerBasic:
         with tracer.span("next") as nxt:
             pass
         assert nxt.parent_span_id is None
+
+    def test_short_lived_tracers_do_not_grow_the_context(self):
+        def run():
+            before = len(contextvars.copy_context())
+            for _ in range(100):
+                with Tracer().span("op"):
+                    pass
+            return len(contextvars.copy_context()) - before
+
+        assert contextvars.copy_context().run(run) <= 1
 
 
 class TestTracerConcurrency:

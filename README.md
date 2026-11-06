@@ -136,7 +136,7 @@ pip install -e ".[dev]"
 pytest --cov=prompt_trace
 ```
 
-39 tests cover: span model, storage roundtrip (both backends), tracer context-manager + nested spans + error propagation + span isolation across asyncio tasks and threads + spans ended in another task, a callback or out of order, the Anthropic instrumenter against a stub client, diff_spans for identical/different inputs, diff_traces for paired/left-only/right-only spans, replay_span with overrides + error cases, and a smoke test of the overhead benchmark.
+40 tests cover: span model, storage roundtrip (both backends), tracer context-manager + nested spans + error propagation + span isolation across asyncio tasks and threads + spans ended in another task, a callback or out of order + no per-tracer context growth, the Anthropic instrumenter against a stub client, diff_spans for identical/different inputs, diff_traces for paired/left-only/right-only spans, replay_span with overrides + error cases, and a smoke test of the overhead benchmark.
 
 ## Docker
 
