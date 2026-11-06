@@ -61,6 +61,18 @@ class TestTracerBasic:
         assert store.spans[0].name == "manual"
         assert store.spans[0].kind == SpanKind.TOOL
 
+    def test_span_ended_out_of_order_is_not_left_as_parent(self):
+        tracer = Tracer()
+        outer = tracer.start_span("outer")
+        inner = tracer.start_span("inner")
+        tracer.end_span(outer)
+        assert tracer.current_span() is inner
+        tracer.end_span(inner)
+        assert tracer.current_span() is None
+        with tracer.span("next") as nxt:
+            pass
+        assert nxt.parent_span_id is None
+
 
 class TestTracerConcurrency:
     async def test_concurrent_tasks_get_separate_traces(self):
@@ -101,6 +113,36 @@ class TestTracerConcurrency:
         assert left.parent_span_id == root.span_id
         assert right.parent_span_id == root.span_id
         assert left.trace_id == right.trace_id == root.trace_id
+
+    async def test_span_ended_in_another_task_leaves_the_stack(self):
+        tracer = Tracer()
+        stream = tracer.start_span("stream")
+
+        async def finish():
+            tracer.end_span(stream)
+
+        await asyncio.create_task(finish())
+
+        assert tracer.current_span() is None
+        with tracer.span("next") as nxt:
+            pass
+        assert nxt.parent_span_id is None
+        assert nxt.trace_id != stream.trace_id
+
+    async def test_span_ended_in_a_done_callback_leaves_the_stack(self):
+        tracer = Tracer()
+        stream = tracer.start_span("stream")
+        fut = asyncio.get_running_loop().create_future()
+        fut.add_done_callback(lambda _: tracer.end_span(stream))
+        fut.set_result(None)
+        await fut
+        await asyncio.sleep(0)
+
+        assert stream.end_time_ns is not None
+        assert tracer.current_span() is None
+        with tracer.span("next") as nxt:
+            pass
+        assert nxt.parent_span_id is None
 
     def test_threads_do_not_share_a_stack(self):
         tracer = Tracer()

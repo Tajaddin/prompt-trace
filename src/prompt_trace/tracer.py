@@ -32,6 +32,10 @@ class Tracer:
     creator's stack: spans opened inside it nest under the span that was
     current when it was created, and never leak into sibling tasks. Spans
     submitted to the store are shared.
+
+    A span may be ended anywhere: in another task, in a done-callback, or
+    out of LIFO order. Ended spans are skipped when the stack is read, so
+    they never become the parent of a later span.
     """
 
     store: Store = field(default_factory=InMemoryStore)
@@ -41,7 +45,7 @@ class Tracer:
     )
 
     def _stack(self) -> tuple[Span, ...]:
-        return self._stack_var.get()
+        return tuple(s for s in self._stack_var.get() if s.end_time_ns is None)
 
     def current_span(self) -> Span | None:
         stack = self._stack()
@@ -81,9 +85,7 @@ class Tracer:
         span.finish(status=status, error=error)
         # Persist after finish so end_time_ns is set.
         self.store.insert(span)
-        stack = self._stack()
-        if stack and stack[-1] is span:
-            self._stack_var.set(stack[:-1])
+        self._stack_var.set(self._stack())
 
     @contextmanager
     def span(
