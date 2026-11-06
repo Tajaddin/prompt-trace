@@ -14,8 +14,8 @@ instrumenters that need to hand the span back to caller-defined cleanup
 """
 from __future__ import annotations
 
-import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -27,17 +27,21 @@ from prompt_trace.storage import InMemoryStore, Store
 class Tracer:
     """Coordinates Span creation and submission to a Store.
 
-    Tracers are thread-local in the sense that the current-span stack is
-    isolated per thread; spans submitted to the store are shared.
+    The current-span stack lives in a ContextVar, so each thread and each
+    asyncio task sees its own stack. A task starts from a copy of its
+    creator's stack: spans opened inside it nest under the span that was
+    current when it was created, and never leak into sibling tasks. Spans
+    submitted to the store are shared.
     """
 
     store: Store = field(default_factory=InMemoryStore)
-    _local: threading.local = field(default_factory=threading.local, repr=False)
+    _stack_var: ContextVar[tuple[Span, ...]] = field(
+        default_factory=lambda: ContextVar("prompt_trace_span_stack", default=()),
+        repr=False,
+    )
 
-    def _stack(self) -> list[Span]:
-        if not hasattr(self._local, "stack"):
-            self._local.stack = []
-        return self._local.stack
+    def _stack(self) -> tuple[Span, ...]:
+        return self._stack_var.get()
 
     def current_span(self) -> Span | None:
         stack = self._stack()
@@ -64,7 +68,7 @@ class Tracer:
             span.trace_id = parent.trace_id
         elif trace_id is not None:
             span.trace_id = trace_id
-        self._stack().append(span)
+        self._stack_var.set((*self._stack(), span))
         return span
 
     def end_span(
@@ -79,7 +83,7 @@ class Tracer:
         self.store.insert(span)
         stack = self._stack()
         if stack and stack[-1] is span:
-            stack.pop()
+            self._stack_var.set(stack[:-1])
 
     @contextmanager
     def span(
