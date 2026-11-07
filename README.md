@@ -32,7 +32,7 @@ Everything in this list is a single ~80-line module. None of them depend on open
 | Module | Purpose |
 |---|---|
 | `span.py` | Span model with start/end times, kind, status, input/output, usage, attributes, events. |
-| `tracer.py` | Coordinates Span creation and submission. Context-manager API for nested spans. Thread-local current-span stack. |
+| `tracer.py` | Coordinates Span creation and submission. Context-manager API for nested spans. Current-span stack in a `ContextVar`, so threads and asyncio tasks each get their own. |
 | `storage.py` | `InMemoryStore` and `SqliteStore`. Both implement the same Protocol. SQLite is WAL + NORMAL sync. |
 | `instrumenters/anthropic.py` | Drop-in wrapper for `anthropic.Anthropic`. One line to enable: `client = InstrumentedAnthropic(tracer)`. |
 | `diff.py` | Diff two traces span-by-span. Reports `paired`, `left_only`, `right_only`. Unified diff for input/output payloads. |
@@ -136,7 +136,7 @@ pip install -e ".[dev]"
 pytest --cov=prompt_trace
 ```
 
-33 tests cover: span model, storage roundtrip (both backends), tracer context-manager + nested spans + error propagation, the Anthropic instrumenter against a stub client, diff_spans for identical/different inputs, diff_traces for paired/left-only/right-only spans, replay_span with overrides + error cases, and a smoke test of the overhead benchmark.
+40 tests cover: span model, storage roundtrip (both backends), tracer context-manager + nested spans + error propagation + span isolation across asyncio tasks and threads + spans ended in another task, a callback or out of order + no per-tracer context growth, the Anthropic instrumenter against a stub client, diff_spans for identical/different inputs, diff_traces for paired/left-only/right-only spans, replay_span with overrides + error cases, and a smoke test of the overhead benchmark.
 
 ## Docker
 

@@ -14,30 +14,53 @@ instrumenters that need to hand the span back to caller-defined cleanup
 """
 from __future__ import annotations
 
-import threading
+from collections.abc import Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 from prompt_trace.span import Span, SpanKind, SpanStatus
 from prompt_trace.storage import InMemoryStore, Store
+
+# One ContextVar for every Tracer, keyed per tracer. A Context keeps every
+# ContextVar ever set in it alive, so a ContextVar per Tracer would leak one
+# entry per short-lived tracer.
+_STACKS: ContextVar[Mapping[object, tuple[Span, ...]]] = ContextVar(
+    "prompt_trace_span_stacks", default=MappingProxyType({})
+)
 
 
 @dataclass
 class Tracer:
     """Coordinates Span creation and submission to a Store.
 
-    Tracers are thread-local in the sense that the current-span stack is
-    isolated per thread; spans submitted to the store are shared.
+    The current-span stack lives in a ContextVar, so each thread and each
+    asyncio task sees its own stack. A task starts from a copy of its
+    creator's stack: spans opened inside it nest under the span that was
+    current when it was created, and never leak into sibling tasks. Spans
+    submitted to the store are shared.
+
+    A span may be ended anywhere: in another task, in a done-callback, or
+    out of LIFO order. Ended spans are skipped when the stack is read, so
+    they never become the parent of a later span.
     """
 
     store: Store = field(default_factory=InMemoryStore)
-    _local: threading.local = field(default_factory=threading.local, repr=False)
+    _key: object = field(default_factory=object, init=False, repr=False)
 
-    def _stack(self) -> list[Span]:
-        if not hasattr(self._local, "stack"):
-            self._local.stack = []
-        return self._local.stack
+    def _stack(self) -> tuple[Span, ...]:
+        stack = _STACKS.get().get(self._key, ())
+        return tuple(s for s in stack if s.end_time_ns is None)
+
+    def _set_stack(self, stack: tuple[Span, ...]) -> None:
+        stacks = dict(_STACKS.get())
+        if stack:
+            stacks[self._key] = stack
+        else:
+            stacks.pop(self._key, None)
+        _STACKS.set(stacks)
 
     def current_span(self) -> Span | None:
         stack = self._stack()
@@ -64,7 +87,7 @@ class Tracer:
             span.trace_id = parent.trace_id
         elif trace_id is not None:
             span.trace_id = trace_id
-        self._stack().append(span)
+        self._set_stack((*self._stack(), span))
         return span
 
     def end_span(
@@ -77,9 +100,7 @@ class Tracer:
         span.finish(status=status, error=error)
         # Persist after finish so end_time_ns is set.
         self.store.insert(span)
-        stack = self._stack()
-        if stack and stack[-1] is span:
-            stack.pop()
+        self._set_stack(self._stack())
 
     @contextmanager
     def span(

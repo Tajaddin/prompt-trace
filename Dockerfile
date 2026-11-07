@@ -12,7 +12,12 @@ COPY src ./src
 COPY benchmarks ./benchmarks
 COPY README.md LICENSE ./
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e . \
+ && useradd --create-home --uid 10001 app \
+ && chown app /app \
+ && chown -R app /app/benchmarks/results
+
+USER app
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=5s --retries=2 \
     CMD python -c "from prompt_trace import Tracer; print('ok')" || exit 1
